@@ -208,6 +208,12 @@ def ai_sentiment_analysis(ticker: str, titles: list[str]) -> dict:
             "impact": "Low", "summary": "No news", "used_ai": False
         }
 
+    # Get API key from Streamlit secrets
+    api_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        # No key configured — fall through to keyword fallback
+        raise ValueError("No ANTHROPIC_API_KEY in secrets")
+
     titles_text = "\n".join(f"{i+1}. {t}" for i, t in enumerate(titles))
 
     prompt = f"""You are a financial news sentiment analyzer for stock {ticker}.
@@ -240,7 +246,11 @@ Rules:
     try:
         response = requests.post(
             "https://api.anthropic.com/v1/messages",
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01"
+            },
             json={
                 "model": "claude-sonnet-4-20250514",
                 "max_tokens": 1000,
