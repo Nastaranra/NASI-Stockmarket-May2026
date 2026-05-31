@@ -301,6 +301,43 @@ Rules:
         }
  
  
+ 
+def debug_news_raw(ticker):
+    import json
+    results = {}
+    try:
+        news = yf.Ticker(ticker).news or []
+        results["yfinance_count"] = len(news)
+        results["yfinance_first"] = json.dumps(news[0], default=str, indent=2) if news else "empty"
+    except Exception as e:
+        results["yfinance_error"] = str(e)
+    try:
+        rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+        r = requests.get(rss_url, timeout=10)
+        results["yahoo_rss_status"] = r.status_code
+        results["yahoo_rss_length"] = len(r.content)
+        if r.status_code == 200:
+            root = ET.fromstring(r.content)
+            items = root.findall(".//item")
+            results["yahoo_rss_items"] = len(items)
+            if items:
+                results["yahoo_rss_first_title"] = items[0].findtext("title", "")
+    except Exception as e:
+        results["yahoo_rss_error"] = str(e)
+    try:
+        google_url = f"https://news.google.com/rss/search?q={ticker}+stock&hl=en-US&gl=US&ceid=US:en"
+        r = requests.get(google_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        results["google_rss_status"] = r.status_code
+        if r.status_code == 200:
+            root = ET.fromstring(r.content)
+            items = root.findall(".//item")
+            results["google_rss_items"] = len(items)
+            if items:
+                results["google_rss_first_title"] = items[0].findtext("title", "")
+    except Exception as e:
+        results["google_rss_error"] = str(e)
+    return results
+ 
 @st.cache_data(ttl=3600)
 def get_news_sentiment(ticker, max_items=10):
     """
@@ -1652,6 +1689,13 @@ with tab1:
         st.dataframe(pd.DataFrame(score_rows), use_container_width=True)
  
         st.markdown("### 📰 Recent News Sentiment")
+ 
+        # Debug expander — helps diagnose news fetch issues
+        with st.expander("🔧 Debug: Raw news fetch results"):
+            if st.button("Run news debug"):
+                debug_result = debug_news_raw(selected_ticker)
+                st.json(debug_result)
+ 
         if result["news_df"].empty:
             st.info("No recent Yahoo news found for this ticker.")
         else:
@@ -1805,4 +1849,3 @@ with tab4:
     st.subheader("📋 Ticker List")
     st.write(f"Total tickers loaded: **{len(ALL_TICKERS)}**")
     st.dataframe(pd.DataFrame({"Ticker": ALL_TICKERS}), use_container_width=True, height=700)
- 
